@@ -1,12 +1,16 @@
 import RPi.GPIO as GPIO
 import time, json
+from pathlib import Path
 
 from functools import partial
-from sensor import (sensor_names, sensor_counts, ir_sensor_callback)
+from sensor import (sensor_names, sensor_counts, ir_sensor_callback, load_sensor_config,create_data_json)
 
-def main(jsonpath: str):
-    SENSOR_1 = 17  # GPIO 17 (Pin 11)
-    SENSOR_2 = 27  # GPIO 27 (Pin 13)
+def main(jsonpath: str, configpath: str):
+    configured_sensors = load_sensor_config(configpath)
+
+    if not Path(jsonpath).exists():
+        create_data_json(configured_sensors,jsonpath)
+
 
     # Load counts from JSON file
     try:
@@ -19,27 +23,23 @@ def main(jsonpath: str):
     # Pin setup
     #------------------------------------------------------
 
-    sensor_names[SENSOR_1] = "Sensor 1"
-    sensor_names[SENSOR_2] = "Sensor 2"
-
     GPIO.setmode(GPIO.BCM)
-    GPIO.setup(SENSOR_1, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    GPIO.setup(SENSOR_2, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+    for name, pin in configured_sensors.items():
+        sensor_names[pin] = name
+        sensor_counts.setdefault(name, 0)
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     #------------------------------------------------------
     # Detect both rising and falling edge
     #------------------------------------------------------
 
-    GPIO.add_event_detect(
-        SENSOR_1, 
-        GPIO.BOTH, 
-        callback=partial(ir_sensor_callback, savepath=jsonpath),
-        bouncetime=20)
-    GPIO.add_event_detect(
-        SENSOR_2,
-        GPIO.BOTH,
-        callback=partial(ir_sensor_callback, savepath=jsonpath),
-        bouncetime=20)
+    for pin in configured_sensors.values():
+        GPIO.add_event_detect(
+            pin,
+            GPIO.BOTH,
+            callback=partial(ir_sensor_callback, savepath=jsonpath),
+            bouncetime=20)
 
     print("Monitoring IR sensors... Press CTRL+C to stop")
 
@@ -54,5 +54,6 @@ def main(jsonpath: str):
         GPIO.cleanup()
 
 if __name__ == '__main__':
-    ir_data_json ="ir_data.json"
-    main(jsonpath=ir_data_json)
+    ir_data_json = "data.json"
+    config_json = "config.json"
+    main(jsonpath=ir_data_json, configpath=config_json)
