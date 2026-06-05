@@ -1,12 +1,22 @@
 import RPi.GPIO as GPIO
 import json
+import threading
 
 sensor_names = {}
 sensor_counts = {}
+_save_lock = threading.Lock() # prevent save and reset at same time 
 
 def save_counts(path:str):
-    with open(path,"w") as f:
-        json.dump(sensor_counts, f)
+    with _save_lock:
+        with open(path,"w") as f:
+            json.dump(sensor_counts, f)
+
+def reset_counts(path: str, fresh_counts: dict[str, int]):
+    with _save_lock:
+        sensor_counts.clear()
+        sensor_counts.update(fresh_counts)
+        with open(path, "w") as f:
+            json.dump(sensor_counts, f, indent=4)
 
 def load_sensor_config(configpath: str) -> dict[str, int]:
     try:
@@ -47,22 +57,11 @@ def create_data_json(sensor: dict,data_path: json):
     with open(data_path, "w") as json_file:
         json.dump(sensor_data, json_file, indent=4)
 
-def ir_sensor_callback(channel,savepath):
-    #channel is sensor gpio _
-    name = sensor_names.get(channel, f"GPIO {channel}") # name = sensor_names[channel]
-
-    if not GPIO.input(channel): #beam broken (obj between)
-
-        sensor_counts[name] = sensor_counts.get(name, 0) + 1
-        print(
-            f"{name}: Object between beam!"
-            f"Count = {sensor_counts[name]}"
-        )
-
-        save_counts(path=savepath)
-
-    else:
-        print(f"{name}: Beam Restored ")
+def ir_sensor_callback(channel, savepath):
+    name = sensor_names.get(channel, f"GPIO {channel}")
+    sensor_counts[name] = sensor_counts.get(name, 0) + 1
+    print(f"{name}: Vote! Count = {sensor_counts[name]}")
+    save_counts(path=savepath)
 
 if __name__=='__main__':
     config_json = "config.json"

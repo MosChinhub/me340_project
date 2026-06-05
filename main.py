@@ -1,27 +1,39 @@
-import RPi.GPIO as GPIO
-import time, json
+import json
+import time
+import threading
 from pathlib import Path
-
 from functools import partial
-from sensor import (sensor_names, sensor_counts, ir_sensor_callback, load_sensor_config,create_data_json)
-
-def main(jsonpath: str, configpath: str):
+ 
+import RPi.GPIO as GPIO
+ 
+from sensor import (
+    sensor_names,
+    sensor_counts,
+    ir_sensor_callback,
+    load_sensor_config,
+    create_data_json,
+    reset_counts,
+)
+from display import WouldYouRatherDisplay
+ 
+# ─────────────────────────────────────────────
+#  Paths
+# ─────────────────────────────────────────────
+DATA_PATH   = "data.json"
+CONFIG_PATH = "config.json"
+ 
+ 
+def run_gpio(jsonpath: str, configpath: str):
     configured_sensors = load_sensor_config(configpath)
 
     if not Path(jsonpath).exists():
-        create_data_json(configured_sensors,jsonpath)
+        create_data_json(configured_sensors, jsonpath)
 
-
-    # Load counts from JSON file
     try:
         with open(jsonpath, "r") as f:
             sensor_counts.update(json.load(f))
     except FileNotFoundError:
-        raise ValueError (f"{jsonpath} not found. Upload {jsonpath}.")
-
-    #------------------------------------------------------
-    # Pin setup
-    #------------------------------------------------------
+        raise ValueError(f"{jsonpath} not found.")
 
     GPIO.setmode(GPIO.BCM)
 
@@ -30,30 +42,43 @@ def main(jsonpath: str, configpath: str):
         sensor_counts.setdefault(name, 0)
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    #------------------------------------------------------
-    # Detect both rising and falling edge
-    #------------------------------------------------------
-
-    for pin in configured_sensors.values():
-        GPIO.add_event_detect(
-            pin,
-            GPIO.BOTH,
-            callback=partial(ir_sensor_callback, savepath=jsonpath),
-            bouncetime=20)
+    # Track last state for each pin
+    last_states = {pin: GPIO.input(pin) for pin in configured_sensors.values()}
 
     print("Monitoring IR sensors... Press CTRL+C to stop")
 
     try:
         while True:
-            time.sleep(0.1)
+            for pin in configured_sensors.values():
+                current = GPIO.input(pin)
+                if current != last_states[pin]:
+                    if current == GPIO.LOW:  # falling = beam broken = vote
+                        ir_sensor_callback(pin, savepath=jsonpath)
+                    last_states[pin] = current
+            time.sleep(0.01)
 
     except KeyboardInterrupt:
         print("\nStopped.")
-
     finally:
         GPIO.cleanup()
-
-if __name__ == '__main__':
-    ir_data_json = "data.json"
-    config_json = "config.json"
-    main(jsonpath=ir_data_json, configpath=config_json)
+ 
+ 
+def main():
+    # ── Run GPIO loop in background thread ───
+    gpio_thread = threading.Thread(
+        target=run_gpio,
+        args=(DATA_PATH, CONFIG_PATH),
+        daemon=True,   # dies automatically when main thread exits
+    )
+    gpio_thread.start()
+ 
+    # ── Run pygame display on main thread ────
+    # (pygame must run on the main thread on most platforms)
+    display = WouldYouRatherDisplay(
+        reset_counts_callback=partial(reset_counts, DATA_PATH)
+    )
+    display.run()
+ 
+ 
+if __name__ == "__main__":
+    main()
