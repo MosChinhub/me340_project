@@ -21,6 +21,7 @@ from display import WouldYouRatherDisplay
 # ─────────────────────────────────────────────
 DATA_PATH   = "data.json"
 CONFIG_PATH = "config.json"
+SCORES_PATH = "scores.json"
  
  
 def run_gpio(jsonpath: str, configpath: str):
@@ -65,6 +66,10 @@ def run_gpio(jsonpath: str, configpath: str):
  
 def main():
     # ── Run GPIO loop in background thread ───
+    if not Path(SCORES_PATH).exists():
+        with open(SCORES_PATH,"w") as f:
+            json.dump({},f, indent=4)
+
     gpio_thread = threading.Thread(
         target=run_gpio,
         args=(DATA_PATH, CONFIG_PATH),

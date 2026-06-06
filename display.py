@@ -12,8 +12,9 @@ from questions import QUESTIONS
 #  Config
 # ─────────────────────────────────────────────
 DATA_PATH       = "data.json"
+SCORES_PATH     = "scores.json"
 POLL_INTERVAL   = 0.5       # seconds between JSON reads
-RESULT_DURATION = 8.0       # seconds to show results before next question
+RESULT_DURATION = 5.0       # seconds to show results before next question
 VOTE_THRESHOLD  = 1         # minimum total votes before showing results
 FPS             = 60
 
@@ -125,8 +126,10 @@ class WouldYouRatherDisplay:
         self.font_small  = pygame.font.SysFont("dejavusans", int(self.H * 0.032))
 
         # Questions
-        self.questions   = QUESTIONS[:]
-        random.shuffle(self.questions)
+        indices = list(range(len(QUESTIONS)))
+        random.shuffle(indices)
+        self.question_indices = indices
+        self.questions = [QUESTIONS[index] for index in indices]
         self.q_index     = 0
 
         # State machine
@@ -166,11 +169,29 @@ class WouldYouRatherDisplay:
         except Exception:
             pass
         self.counts = fresh
+    
+    def _load_scores(self):
+        try:
+            with open(SCORES_PATH, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_scores(self):
+        scores = self._load_scores()
+        original_index = str(self.question_indices[self.q_index % len(self.questions)])
+        s1 = self.counts.get("IRSensor 1", 0)
+        s2 = self.counts.get("IRSensor 2", 0)
+        prev = scores.get(original_index, [0, 0])
+        scores[original_index] = [prev[0] + s1, prev[1] + s2]
+        with open(SCORES_PATH, "w") as f:
+            json.dump(scores, f, indent=4)
 
     def _current_question(self):
         return self.questions[self.q_index % len(self.questions)]
 
     def _next_question(self):
+        self._save_scores()
         self.q_index += 1
         self._reset_json()
         self.state       = "voting"
@@ -179,11 +200,21 @@ class WouldYouRatherDisplay:
         self.last_total  = 0
 
     def _percentages(self):
-        s1 = self.counts.get("IRSensor 1", 0)
-        s2 = self.counts.get("IRSensor 2", 0)
+        if self.state == "results":
+            scores = self._load_scores()
+            original_index = str(self.question_indices[self.q_index % len(self.questions)])
+            prev = scores.get(original_index, [0, 0])
+            s1 = prev[0] + self.counts.get("IRSensor 1", 0)
+            s2 = prev[1] + self.counts.get("IRSensor 2", 0)
+
+        else:
+            s1 = self.counts.get("IRSensor 1", 0)
+            s2 = self.counts.get("IRSensor 2", 0)
+
         total = s1 + s2
         if total == 0:
             return 0.0, 0.0, 0
+        
         return round(s1 / total * 100, 1), round(s2 / total * 100, 1), total
 
     # ── drawing ─────────────────────────────
