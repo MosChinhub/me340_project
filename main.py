@@ -22,6 +22,7 @@ from display import WouldYouRatherDisplay
 DATA_PATH   = "data.json"
 CONFIG_PATH = "config.json"
 SCORES_PATH = "scores.json"
+DELAY_TIME = 2.0 # delay time for each sensor to receive again
  
  
 def run_gpio(jsonpath: str, configpath: str):
@@ -46,15 +47,28 @@ def run_gpio(jsonpath: str, configpath: str):
     # Track last state for each pin
     last_states = {pin: GPIO.input(pin) for pin in configured_sensors.values()}
 
+    #Create a dictionary to keep track of the cooldown time for each pin
+    cooldown_until = {pin: 0 for pin in configured_sensors.values()}
+    
+
     print("Monitoring IR sensors... Press CTRL+C to stop")
 
     try:
         while True:
-            for pin in configured_sensors.values():
+            for sensor_name, pin in configured_sensors.items():
                 current = GPIO.input(pin)
                 if current != last_states[pin]:
                     if current == GPIO.LOW:  # falling = beam broken = vote
-                        ir_sensor_callback(pin, savepath=jsonpath)
+
+                        # Check if the current time is past the sensor's cooldown expiration
+                        #if use time.sleep() it will freeze entire code
+
+                        if time.time() > cooldown_until[pin]:
+                            ir_sensor_callback(pin, savepath=jsonpath)
+                            cooldown_until[pin] = time.time() + DELAY_TIME
+                        else:
+                            print(f"{sensor_name} (Pin {pin}) is cooling down, ignoring trigger.")
+
                     last_states[pin] = current
             time.sleep(0.01)
 
