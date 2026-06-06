@@ -12,8 +12,9 @@ from questions import QUESTIONS
 #  Config
 # ─────────────────────────────────────────────
 DATA_PATH       = "data.json"
+SCORES_PATH     = "scores.json"
 POLL_INTERVAL   = 0.5       # seconds between JSON reads
-RESULT_DURATION = 8.0       # seconds to show results before next question
+RESULT_DURATION = 5.0       # seconds to show results before next question
 VOTE_THRESHOLD  = 1         # minimum total votes before showing results
 FPS             = 60
 
@@ -125,8 +126,10 @@ class WouldYouRatherDisplay:
         self.font_small  = pygame.font.SysFont("dejavusans", int(self.H * 0.032))
 
         # Questions
-        self.questions   = QUESTIONS[:]
-        random.shuffle(self.questions)
+        indices = list(range(len(QUESTIONS)))
+        random.shuffle(indices)
+        self.question_indices = indices
+        self.questions = [QUESTIONS[index] for index in indices]
         self.q_index     = 0
 
         # State machine
@@ -147,6 +150,9 @@ class WouldYouRatherDisplay:
         self.anim_t      = 0.0   # 0→1 fade-in on question change
         self.last_total  = sum(self.counts.values())
 
+        #skip button
+        self.skip_rect = pygame.Rect(0, 0, 0, 0)
+
     # ── helpers ─────────────────────────────
     def _read_json(self):
         try:
@@ -166,11 +172,29 @@ class WouldYouRatherDisplay:
         except Exception:
             pass
         self.counts = fresh
+    
+    def _load_scores(self):
+        try:
+            with open(SCORES_PATH, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_scores(self):
+        scores = self._load_scores()
+        original_index = str(self.question_indices[self.q_index % len(self.questions)])
+        s1 = self.counts.get("IRSensor 1", 0)
+        s2 = self.counts.get("IRSensor 2", 0)
+        prev = scores.get(original_index, [0, 0])
+        scores[original_index] = [prev[0] + s1, prev[1] + s2]
+        with open(SCORES_PATH, "w") as f:
+            json.dump(scores, f, indent=4)
 
     def _current_question(self):
         return self.questions[self.q_index % len(self.questions)]
 
     def _next_question(self):
+        self._save_scores()
         self.q_index += 1
         self._reset_json()
         self.state       = "voting"
@@ -179,11 +203,21 @@ class WouldYouRatherDisplay:
         self.last_total  = 0
 
     def _percentages(self):
-        s1 = self.counts.get("IRSensor 1", 0)
-        s2 = self.counts.get("IRSensor 2", 0)
+        if self.state == "results":
+            scores = self._load_scores()
+            original_index = str(self.question_indices[self.q_index % len(self.questions)])
+            prev = scores.get(original_index, [0, 0])
+            s1 = prev[0] + self.counts.get("IRSensor 1", 0)
+            s2 = prev[1] + self.counts.get("IRSensor 2", 0)
+
+        else:
+            s1 = self.counts.get("IRSensor 1", 0)
+            s2 = self.counts.get("IRSensor 2", 0)
+
         total = s1 + s2
         if total == 0:
             return 0.0, 0.0, 0
+        
         return round(s1 / total * 100, 1), round(s2 / total * 100, 1), total
 
     # ── drawing ─────────────────────────────
@@ -246,6 +280,22 @@ class WouldYouRatherDisplay:
         s.blit(txt, (0, 0))
         self.screen.blit(txt, (self.W // 2 - txt.get_width() // 2, self.H - int(self.H * 0.06)))
 
+    def _draw_skip_button(self):
+        btn_w, btn_h = 100, 40
+        btn_x = self.W - btn_w - 20
+        btn_y = self.H - btn_h - 20
+        self.skip_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        # Transparent dark background
+        s = pygame.Surface((btn_w, btn_h), pygame.SRCALPHA)
+        pygame.draw.rect(s, (0, 0, 0, 120), (0, 0, btn_w, btn_h), border_radius=10) # change to 180 for darker or 60 to more see through
+        self.screen.blit(s, (btn_x, btn_y))
+
+        # Skip text centered
+        txt = self.font_small.render("skip", True, (255, 255, 255))
+        self.screen.blit(txt, (btn_x + (btn_w - txt.get_width()) // 2,
+                            btn_y + (btn_h - txt.get_height()) // 2))
+
     def _spawn_particles(self):
         half = self.W // 2
         for _ in range(2):
@@ -280,6 +330,9 @@ class WouldYouRatherDisplay:
                         self._next_question()
                     if event.key == pygame.K_r:      # reset counts (debug)
                         self._reset_json()
+                if event.type == pygame.MOUSEBUTTONDOWN: #skip button
+                    if self.skip_rect.collidepoint(event.pos):
+                        self._next_question()                
 
             # ── Poll JSON ───────────────────
             now = time.time()
@@ -340,6 +393,9 @@ class WouldYouRatherDisplay:
             # Particles on top
             # for p in self.particles:
             #     p.draw(self.screen)
+            
+            #skip button
+            self._draw_skip_button()
 
             # Centre badge last (always on top)
             self._draw_or_badge()
