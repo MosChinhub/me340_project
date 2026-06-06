@@ -150,6 +150,9 @@ class WouldYouRatherDisplay:
         self.anim_t      = 0.0   # 0→1 fade-in on question change
         self.last_total  = sum(self.counts.values())
 
+        #skip button
+        self.skip_rect = pygame.Rect(0, 0, 0, 0)
+
     # ── helpers ─────────────────────────────
     def _read_json(self):
         try:
@@ -277,6 +280,22 @@ class WouldYouRatherDisplay:
         s.blit(txt, (0, 0))
         self.screen.blit(txt, (self.W // 2 - txt.get_width() // 2, self.H - int(self.H * 0.06)))
 
+    def _draw_skip_button(self):
+        btn_w, btn_h = 100, 40
+        btn_x = self.W - btn_w - 20
+        btn_y = self.H - btn_h - 20
+        self.skip_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        # Transparent dark background
+        s = pygame.Surface((btn_w, btn_h), pygame.SRCALPHA)
+        pygame.draw.rect(s, (0, 0, 0, 120), (0, 0, btn_w, btn_h), border_radius=10) # change to 180 for darker or 60 to more see through
+        self.screen.blit(s, (btn_x, btn_y))
+
+        # Skip text centered
+        txt = self.font_small.render("skip", True, (255, 255, 255))
+        self.screen.blit(txt, (btn_x + (btn_w - txt.get_width()) // 2,
+                            btn_y + (btn_h - txt.get_height()) // 2))
+
     def _spawn_particles(self):
         half = self.W // 2
         for _ in range(2):
@@ -311,6 +330,9 @@ class WouldYouRatherDisplay:
                         self._next_question()
                     if event.key == pygame.K_r:      # reset counts (debug)
                         self._reset_json()
+                if event.type == pygame.MOUSEBUTTONDOWN: #skip button
+                    if self.skip_rect.collidepoint(event.pos):
+                        self._next_question()                
 
             # ── Poll JSON ───────────────────
             now = time.time()
@@ -371,6 +393,9 @@ class WouldYouRatherDisplay:
             # Particles on top
             # for p in self.particles:
             #     p.draw(self.screen)
+            
+            #skip button
+            self._draw_skip_button()
 
             # Centre badge last (always on top)
             self._draw_or_badge()
