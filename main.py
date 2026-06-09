@@ -22,11 +22,12 @@ from display import WouldYouRatherDisplay
 DATA_PATH   = "data.json"
 CONFIG_PATH = "config.json"
 SCORES_PATH = "scores.json"
+IR_CONFIGKEY = "ir_sensors"
 DELAY_TIME = 2.0 # delay time for each sensor to receive again
  
  
-def run_gpio(jsonpath: str, configpath: str):
-    configured_sensors = load_sensor_config(configpath)
+def run_ir_gpio(jsonpath: str, configpath: str):
+    configured_sensors = load_sensor_config(configpath=configpath, configkey=IR_CONFIGKEY)
 
     if not Path(jsonpath).exists():
         create_data_json(configured_sensors, jsonpath)
@@ -85,11 +86,12 @@ def main():
             json.dump({},f, indent=4)
 
     gpio_thread = threading.Thread(
-        target=run_gpio,
+        target=run_ir_gpio,
         args=(DATA_PATH, CONFIG_PATH),
         daemon=True,   # dies automatically when main thread exits
     )
     gpio_thread.start()
+    # gpio_thread.join() #testing ir only
  
     # ── Run pygame display on main thread ────
     # (pygame must run on the main thread on most platforms)
