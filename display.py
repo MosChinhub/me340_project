@@ -8,6 +8,9 @@ import random
 import sys
 from questions import QUESTIONS
 
+import serial
+import threading
+
 # ─────────────────────────────────────────────
 #  Config
 # ─────────────────────────────────────────────
@@ -29,6 +32,10 @@ RIGHT_GRAD = [(30,  160, 255), (80,  60, 255)]
 # After voting: greyed-out winner side becomes dark, loser keeps colour
 GREY_TOP   = (70,  70,  80)
 GREY_BOT   = (50,  50,  60)
+
+#link data from arduino
+SERIAL_PORT = "/dev/ttyACM0"  # change to ttyUSB0 if needed
+SERIAL_BAUD = 115200
 
 
 # ─────────────────────────────────────────────
@@ -152,6 +159,13 @@ class WouldYouRatherDisplay:
 
         #skip button
         self.skip_rect = pygame.Rect(0, 0, 0, 0)
+    
+        #Arduino linking
+        # Trash compactor state
+        self.trash_level = 0
+        self.trash_status = "IDLE"
+        self._start_serial_thread()
+
 
     # ── helpers ─────────────────────────────
     def _read_json(self):
@@ -220,6 +234,55 @@ class WouldYouRatherDisplay:
         
         return round(s1 / total * 100, 1), round(s2 / total * 100, 1), total
 
+    #----trash compressing----------------
+    def _start_serial_thread(self):
+        def read_serial():
+            try:
+                ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+                while True:
+                    line = ser.readline().decode("utf-8").strip()
+                    if line.startswith("{"):
+                        data = json.loads(line)
+                        # self.trash_level = data.get("level", 0)
+                        self.trash_status = data.get("status", "IDLE")
+            except Exception as e:
+                self.trash_status = "DISCONNECTED"
+        threading.Thread(target=read_serial, daemon=True).start()
+
+    def _draw_trash_overlay(self):
+        # ── Top-left small info (always visible) ──
+        pad = 12
+        # txt1 = self.font_small.render(f"Trash: {self.trash_level}%", True, (255, 255, 255))
+        txt2 = self.font_small.render(f"Status: {self.trash_status}", True, (255, 255, 255))
+        # self.screen.blit(txt1, (pad, pad))
+        # self.screen.blit(txt2, (pad, pad + txt1.get_height() + 4))
+        self.screen.blit(txt2, (pad, pad))  
+
+        # ── Center popup (only when not IDLE) ──
+        if self.trash_status != "IDLE":
+            box_w, box_h = int(self.W * 0.5), int(self.H * 0.3)
+            box_x = (self.W - box_w) // 2
+            box_y = (self.H - box_h) // 2
+
+            # Transparent white rectangle
+            s = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            pygame.draw.rect(s, (255, 255, 255, 200), (0, 0, box_w, box_h), border_radius=20)
+            self.screen.blit(s, (box_x, box_y))
+
+            # Status text
+            status_surf = self.font_pct.render(self.trash_status, True, (20, 20, 20))
+            self.screen.blit(status_surf, (
+                box_x + (box_w - status_surf.get_width()) // 2,
+                box_y + int(box_h * 0.2)
+            ))
+
+            # Warning text
+            warn_surf = self.font_small.render("Do not throw trash right now", True, (20, 20, 20))
+            self.screen.blit(warn_surf, (
+                box_x + (box_w - warn_surf.get_width()) // 2,
+                box_y + int(box_h * 0.6)
+            ))
+    
     # ── drawing ─────────────────────────────
     def _draw_card(self, rect, grad_top, grad_bot, label, sublabel=None):
         """Draw one half-card with gradient + text."""
@@ -396,6 +459,9 @@ class WouldYouRatherDisplay:
             
             #skip button
             self._draw_skip_button()
+
+            #arduino trash receiving
+            self._draw_trash_overlay()
 
             # Centre badge last (always on top)
             self._draw_or_badge()
