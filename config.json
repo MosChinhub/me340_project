@@ -1,6 +1,6 @@
 {
-  "sensors": {
-    "IRSensor 1": 17,
-    "IRSensor 2": 27
+  "ir_sensors": {
+    "IRSensor 1": 18,
+    "IRSensor 2": 23
   }
 }

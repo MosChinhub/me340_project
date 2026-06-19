@@ -18,14 +18,18 @@ def reset_counts(path: str, fresh_counts: dict[str, int]):
         with open(path, "w") as f:
             json.dump(sensor_counts, f, indent=4)
 
-def load_sensor_config(configpath: str) -> dict[str, int]:
+def load_sensor_config(configpath: str, configkey: str) -> dict[str, int]:
+    '''
+    input: configpath, configkey: each type in config
+    return dict inside each configkey
+    '''
     try:
         with open(configpath, "r") as f:
             config = json.load(f)
     except FileNotFoundError:
         raise ValueError(f"{configpath} not found. Create {configpath}.")
 
-    sensors = config.get("sensors")
+    sensors = config.get(configkey)
     if not isinstance(sensors, dict) or not sensors:
         raise ValueError(f"{configpath} must contain a non-empty 'sensors' object.")
 
