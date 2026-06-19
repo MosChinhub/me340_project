@@ -194,9 +194,7 @@ bool compressCycle()
 
 void sendStatus(const char* status)
 {
-  Serial.print("{\"level\":");
-  Serial.print(0);
-  Serial.print(",\"status\":\"");
+  Serial.print("{\"status\":\"");
   Serial.print(status);
   Serial.println("\"}");
 }

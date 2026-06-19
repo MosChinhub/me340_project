@@ -162,7 +162,6 @@ class WouldYouRatherDisplay:
     
         #Arduino linking
         # Trash compactor state
-        self.trash_level = 0
         self.trash_status = "IDLE"
         self._start_serial_thread()
 
@@ -243,7 +242,6 @@ class WouldYouRatherDisplay:
                     line = ser.readline().decode("utf-8").strip()
                     if line.startswith("{"):
                         data = json.loads(line)
-                        # self.trash_level = data.get("level", 0)
                         self.trash_status = data.get("status", "IDLE")
             except Exception as e:
                 self.trash_status = "DISCONNECTED"
@@ -252,7 +250,6 @@ class WouldYouRatherDisplay:
     def _draw_trash_overlay(self):
         # ── Top-left small info (always visible) ──
         pad = 12
-        # txt1 = self.font_small.render(f"Trash: {self.trash_level}%", True, (255, 255, 255))
         txt2 = self.font_small.render(f"Status: {self.trash_status}", True, (255, 255, 255))
         # self.screen.blit(txt1, (pad, pad))
         # self.screen.blit(txt2, (pad, pad + txt1.get_height() + 4))
